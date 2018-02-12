@@ -1,0 +1,478 @@
+---
+title:  "SAP.iO Data Science Challenge"
+author: "Ki Ka"
+date:   '`r format(Sys.Date(), "%B %d, %Y")`'
+output: github_document
+---
+
+```{r loading libraries and data, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(caret)
+library(caTools)
+library(tidyverse)
+library(ranger)
+library(ggthemes)
+library(reshape2)
+library(mice)
+
+sapWineTime <- read.csv('/Users/leotrozvii/Desktop/wineTime/SAPio_DataScience_Challenge.csv', header = TRUE)
+```
+## _What makes a wine 'good'?_
+
+I love wine. I first fell in love with Grüner Veltliner. It screams summer. It makes you want to swim in the Danube, even in the winter. That doesn't mean that you should.
+
+We're interested in what makes a good wine. Let's find out. On its face (or bottle's label?) this is a classification problem. Since we're interested in the _what_ of wine quality, I'll avoid less interpretable models that might do quite well at predicting wine quality--like support vector machines or neural nets. I can see logistic regression/linear discriminant analysis, k-nearest neighbors, or some flavor of decision tree being useful.
+
+Here's an outline to my approach in getting us from grape to glass--
+
+* Uncorking the data - exploratory analysis
+    + What measures do we have?
+    + What do they look like (distributions, missingness)
+    + How do they relate to each other (correlations)
+* Decanting the data - feature engineering 
+    + Transformations and dimension reduction
+    + Imputation of missing values
+    + Target prep
+* See, sniff, & sip - modeling
+    + Logisitic regression
+    + CART
+    + KNN
+* Next pour - What I'd do if time were as plentiful as 2-buck-chuck
+
+## Uncorking the data
+
+_each day now the cork more sweetly leaves the bottle_ (Robert Lowell)
+
+### What measures do we have?
+
+I like to know the names of what we're working with:
+
+```{r uncorking the data - names, echo=TRUE, error=FALSE, warning=FALSE, message=FALSE}
+names(sapWineTime)
+```
+
+And their basic summary stats:
+
+```{r uncorking the data - summary, echo=TRUE, error=FALSE, warning=FALSE, message=FALSE}
+summary(sapWineTime)
+```
+
+### What do these measures look like?
+
+#### Distributions
+
+Let's take a look at the distribution of our continuous variables. I identify the continuous variables as those measures with more than 10 unique levels.
+
+```{r uncorking the data - distributions, echo = TRUE, error=FALSE, warning=FALSE, message=FALSE, fig.align = 'center'}
+
+for (i in names(sapWineTime[,(apply(sapWineTime, 2, function(x) length(unique(x))) > 10)])) {
+  print(i)
+  plot <- ggplot(sapWineTime, 
+                 aes(get(i), fill = type)) +
+            geom_histogram() +
+            theme_solarized_2() +
+            theme(plot.title = element_text(hjust = 0.5), 
+                  legend.position = 'bottom') +
+            labs(x = paste(i), 
+                 title = paste('Distribution of ', i)) +
+            facet_wrap(~type)
+  print(plot)
+}
+```
+
+These distributions don't look too worrisome. Some make complete sense. In my time working behind a bar and learning about the production of wine, the right-skewed distributions of `citric.acid`, `free.sulfur.dioxide`, and `total.sulfur.dioxide` in red wines and `residual.sugar` in both red and white wines make contextual sense. I can taste some of the `residual.sugar` outliers, maybe some Sauternes or Rieslings...
+
+#### Missingness
+
+Missingness is always an issue with real data. Hopefully it's missing at random. I'm primarily  interested in whether missing data is related at all with wine type or quality scores. Let's do a few things to quickly explore whether missingness is in fact random:
+
+* Examine overall counts of missing values by type and type + quality
+* Visual inspection
+* Look at t-tests of missingness by type, ANOVA results of missingess by quality rating, and ANOVA results of missigness by type and quality rating
+
+```{r uncorking the data - missingness}
+
+# here i'm creating a summary data frame aggregated to the type and type+quality-level 
+# with a count of missing values and proportion of observations with missing values
+# for each of the physiochemical variables
+
+# type-level missingness
+#
+
+sapWineTimeMissOverall <- data.frame(aggregate(. ~ type, data = sapWineTime, 
+                     function(x) {sum(is.na(x))/length(x)},
+                     na.action = NULL))
+
+sapWineTimeMissOverall <- melt(sapWineTimeMissOverall,
+                               id.vars = 'type',
+                               value.name = 'percMissing')
+
+sapWineTimeMissOverall <- sapWineTimeMissOverall %>%
+  filter(percMissing > 0)
+
+# type+quality-level missingness
+#
+
+sapWineTimeMiss <- data.frame(aggregate(. ~ type + quality, 
+                                        data = sapWineTime, 
+                                        function(x) {sum(is.na(x))/length(x)}, 
+                                        na.action = NULL))
+
+sapWineTimeMiss <- melt(sapWineTimeMiss, 
+                        id.vars = c('type', 'quality'), 
+                        value.name = 'percMissing')
+
+sapWineTimeMiss <- cbind(sapWineTimeMiss, 
+                  melt(aggregate(. ~ type + quality, 
+                                 data = sapWineTime, 
+                                 function(x) {sum(is.na(x))}, 
+                                 na.action = NULL),
+                       id.vars = c('type', 'quality'), 
+                       value.name = 'countMissing')[4])
+
+sapWineTimeMiss <- sapWineTimeMiss %>%
+  filter(countMissing > 0)
+
+# creating plot object using the data frames created above
+#
+
+missTypePlot <- 
+  ggplot(sapWineTimeMissOverall, 
+         aes(x = variable, y = percMissing, fill = type)) +
+  geom_bar(stat = 'identity', 
+           position = 'dodge') +
+  scale_y_continuous(labels = scales::percent) + 
+  labs(title = 'Percent Missingness by Wine Type', 
+       y = 'Percent Missing') +
+  theme_solarized_2() +
+  theme(legend.position = 'bottom', 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5))
+
+missTypeQualMissPlot <- 
+  ggplot(sapWineTimeMiss, 
+         aes(x = quality, y = percMissing, fill = type)) +
+  geom_bar(stat = 'identity', 
+           position = 'dodge') +
+  scale_y_continuous(labels = scales::percent) + 
+  scale_x_continuous(breaks = seq(3, 9, 1)) +
+  labs(title = 'Percent Missingness by Wine Type & Quality Rating', 
+       y = 'Percent Missing') +
+  facet_wrap(~variable, 
+             ncol = 1) + 
+  theme_solarized_2() +
+  theme(legend.position = 'bottom', 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5))
+```
+
+```{r , fig.height=5, fig.width=7, fig.align='center'}
+missTypePlot
+```
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+missTypeQualMissPlot
+```
+
+For the most part, it looks like variables are missing at random when we stratify by wine type and quality scores. There are a couple of worrisome spots, like the proportion of 3-star white wines missing `volatile.acidity` and `astringency.rating`, or 9-star white wines missing `residual.sugar`, but those cells are relatively small and we can likely combine them with other star ratings when we get to classification models.
+
+The more concerning issue is the proportion of observations that are missing `residual.sugar` (~36% of all observations). We have a few choices about how to deal with this: (1) impute the missing values, (2) drop the feature from any modeling, (3) buy the 2,364 bottles with missing values and measure `residual.sugar` ourselves. I like that idea.
+
+Before we decide anything, let's just take a quick look at whether missingness is occurring at random:
+
+```{r rough test for missingness at random}
+# testing for missingness at random by creating a sparse matrix of indicators for (not) missingness
+# and binding type and quality in order to run some t-tests and anovas
+#
+
+sapWineTimeMAR <- cbind(sapWineTime[, c('type', 'quality')], 
+              sapply(sapWineTime[, as.character(unique(sapWineTimeMiss$variable))], 
+                     function(x) ifelse(is.na(x), 1, 0)))
+
+for (i in names(sapWineTimeMAR[ , 3:dim(sapWineTimeMAR)[2]])) {
+  print(paste('******************  ', i, '  ******************'))
+  print(paste('t-test p-value :', t.test(get(i) ~ type, data = sapWineTimeMAR)$p.value))
+  print(summary(aov(get(i) ~ quality, data = sapWineTimeMAR)))
+  print(summary(aov(get(i) ~ type*quality, data = sapWineTimeMAR)))
+}
+```
+
+It looks like values are missing at random. For the sake of time, we're going to either drop `residual.sugar` from analyses (if it's highly correlated with another variable) or coerce it to be a categorical variable and introduce a "missing" category.
+
+### How do measures relate? 
+
+I have a very strong suspicion that the physiochemical characteristics of wine are correlated and these correlations differ by wine type. I'll take a visual approach in assessing these correlations. This will help me do three things:
+
+1. What measures seem to be related with quality?
+2. Do some measures tell me the same information? 
+3. Is there a reasonable (and preliminary) case to stratify my analyses by wine type?
+
+#### Plotting correlations
+
+I plot correlations by creating correlation matrices, shaping them into easily plottable (tidy) data frames, and using those data frames to create tile heat maps. 
+
+```{r plotting correlations, fig.align = 'center'}
+
+# creating correlation matrices from data, dropping type as i'll create separate matrices for red and white wines
+wineCorMat <- round(cor(select(sapWineTime, -type), 
+                        use = 'na.or.complete'),
+                    2)
+wineCorMatWhite <- round(cor(split(select(sapWineTime, -type), 
+                                   sapWineTime$type)$white, 
+                             use = 'na.or.complete'),
+                         2)
+wineCorMatRed <- round(cor(split(select(sapWineTime, -type), 
+                                 sapWineTime$type)$red, 
+                           use = 'na.or.complete'),
+                       2)
+
+# reducing information redundancy for the purposes of creating a clean plot later on
+
+wineCorMat[lower.tri(wineCorMat)] <- NA
+wineCorMatWhite[lower.tri(wineCorMatWhite)] <- NA
+wineCorMatRed[lower.tri(wineCorMatRed)] <- NA
+
+
+# creating tidy data frames to for easy plotting and creating a data frame that's the difference between red and white wine correlations
+
+wineCorMatMelt <- melt(wineCorMat, na.rm = TRUE)
+wineCorMatWhiteMelt <- melt(wineCorMatWhite, na.rm = TRUE)
+wineCorMatRedMelt <- melt(wineCorMatRed, na.rm = TRUE)
+wineCorMatDiff <- data.frame(wineCorMatMelt[, 1:2], 
+                             value = abs(wineCorMatWhiteMelt[, 3] - wineCorMatRedMelt[, 3]))
+
+ggplot(data = wineCorMatMelt, 
+       aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  theme_solarized_2() +
+  theme(legend.position = 'bottom', 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5)) +
+  labs(title = 'All Wines - Correlation Matrix') +
+  scale_fill_gradient2_tableau(palette = 'Temperature')
+
+ggplot(data = wineCorMatWhiteMelt, 
+       aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  theme_solarized_2() +
+  theme(legend.position = 'bottom', 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5)) +
+  labs(title = 'White Wines - Correlation Matrix') +
+  scale_fill_gradient2_tableau(palette = 'Temperature')
+
+ggplot(data = wineCorMatRedMelt, 
+       aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  theme_solarized_2() +
+  theme(legend.position = 'bottom', 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5)) +
+  labs(title = 'Red Wines - Correlation Matrix') +
+  scale_fill_gradient2_tableau(palette = 'Temperature')
+
+ggplot(data = wineCorMatDiff, 
+       aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  theme_solarized_2() +
+  theme(legend.position = 'bottom', 
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5)) +
+  labs(title = 'Difference Between White and Red Wine Correlation Coefficients') +
+  scale_fill_gradient2_tableau(palette = 'Temperature')
+```
+
+#### Interpreting correlations
+
+Three correlations jump out when looking at wine overall: 
+
+* `fixed.acidity`-`astringency.rating` (r = 0.99)
+* `free.sulfur.dioxide`-`total.sulfur.dioxide` (r = 0.73)
+* `density`-`alcohol` (r = -0.67) 
+
+Looking at white wines only:  
+
+* `fixed.acidity`-`astringency.rating` (r = 0.99)
+* `residual.sugar`-`density` (r = 0.85)
+* `density`-`alcohol` (r = -0.76)
+* `free.sulfur.dioxide`-`total.sulfur.dioxide` (r = 0.62)
+
+And red wines:
+
+* `fixed.acidity`-`astringency.rating` (r = 0.99)
+* `fixed.acidity`-`citric.acid` (r = 0.68)
+* `free.sulfur.dioxide`-`total.sulfur.dioxide` (r = 0.68)
+* `astringency.rating`-`density` (r = 0.68)
+* `fixed.acidity`-`pH` (r = -0.68)
+* `astringency.rating`-`pH` (r = -0.67)
+* `fixed.acidity`-`density` (r = 0.66)
+* `citric.acidity`-`astringency.rating` (r = 0.63)
+
+For the purposes of a prelimary model, I think there is evidence to run separate models for white and red wines. 
+
+### Decanting the data
+
+#### Target prep
+
+sapWineTimeRed %>%
+  group_by
+
+### See, Sniff, and Sip - Modeling
+
+We'll fit a random forest
+
+### 
+
+```{r}
+set.seed(1786)
+sapWineTimeWhite <- (split(sapWineTime, f = sapWineTime$type))$white
+sapWineTimeRed <- (split(sapWineTime, f = sapWineTime$type))$red
+```
+
+#### All wines
+
+```{r see sniff & sip - all wines, fig.align='center'}
+
+# dropping highly correlated variables 
+#
+
+sapWineTimeModel <- sapWineTime %>%
+  select(-residual.sugar, -type, -fixed.acidity) %>%
+  na.omit()
+
+# creating training & testing data sets (70/30 split)
+#
+
+sapWineTimeModelIndex <- sample.split(row.names(sapWineTimeModel), SplitRatio = .7)
+sapWineTimeTrain <- sapWineTimeModel[sapWineTimeModelIndex, ]
+sapWineTimeTest <- sapWineTimeModel[!sapWineTimeModelIndex, ]
+
+# fitting a random forest model 
+#
+
+model <- 
+  train(quality ~ .,
+        tuneGrid = data.frame(mtry = c(2, 4, 6, 8)),
+        data = sapWineTimeTrain, 
+        method = 'rf',
+        preProcess = c('scale', 'center'), 
+        trControl = trainControl(method = "cv", number = 5, verboseIter = TRUE),
+        importance = TRUE
+)
+
+# taking a look at the results
+#
+
+plot(model)
+varImp(model$finalModel)
+varImpPlot(model$finalModel)
+
+predQualTest <- data.frame(obs = sapWineTimeTest$quality, 
+                                pred = predict(model, sapWineTimeTest))
+defaultSummary(predQualTest)
+
+```
+
+#### White Wines
+
+```{r see sniff & sip - white wines, fig.align='center'}
+
+# dropping highly correlated variables 
+#
+
+sapWineTimeWhiteModel <- sapWineTimeWhite %>%
+  select(-residual.sugar, -type, -fixed.acidity) %>%
+  na.omit()
+
+# creating training & testing data sets (70/30 split)
+#
+
+sapWineTimeWhiteModelIndex <- sample.split(row.names(sapWineTimeWhiteModel), SplitRatio = .7)
+sapWineTimeWhiteTrain <- sapWineTimeWhiteModel[sapWineTimeWhiteModelIndex, ]
+sapWineTimeWhiteTest <- sapWineTimeWhiteModel[!sapWineTimeWhiteModelIndex, ]
+
+# fitting a random forest model 
+#
+
+modelWhite <- 
+  train(quality ~ .,
+        tuneGrid = data.frame(mtry = c(2, 4, 6, 8)),
+        data = sapWineTimeWhiteTrain, 
+        method = 'rf',
+        preProcess = c('scale', 'center'), 
+        trControl = trainControl(method = "cv", number = 5, verboseIter = TRUE),
+        importance = TRUE
+)
+
+# taking a look at the results
+#
+
+plot(modelWhite)
+varImp(modelWhite$finalModel)
+varImpPlot(modelWhite$finalModel)
+
+predWhiteQualTest <- data.frame(obs = sapWineTimeWhiteTest$quality, 
+                                pred = predict(modelWhite, sapWineTimeWhiteTest))
+defaultSummary(predWhiteQualTest)
+
+```
+
+#### Red Wines
+
+```{r see sniff & sip - red wines, fig.align='center'}
+
+# dropping highly correlated variables 
+#
+
+sapWineTimeRedModel <- sapWineTimeRed %>%
+  select(-residual.sugar, -type, -fixed.acidity) %>%
+  na.omit()
+
+# creating training & testing data sets (70/30 split)
+#
+
+sapWineTimeRedModelIndex <- sample.split(row.names(sapWineTimeRedModel), SplitRatio = .7)
+sapWineTimeRedTrain <- sapWineTimeRedModel[sapWineTimeRedModelIndex, ]
+sapWineTimeRedTest <- sapWineTimeRedModel[!sapWineTimeRedModelIndex, ]
+
+# fitting a random forest model 
+#
+
+modelRed <- 
+  train(quality ~ .,
+        tuneGrid = data.frame(mtry = c(2, 4, 6, 8)),
+        data = sapWineTimeRedTrain, 
+        method = 'rf',
+        preProcess = c('scale', 'center'), 
+        trControl = trainControl(method = "cv", number = 5, verboseIter = TRUE),
+        importance = TRUE
+)
+
+# taking a look at the results
+#
+
+plot(modelRed)
+varImp(modelRed$finalModel)
+varImpPlot(modelRed$finalModel)
+
+predRedQualTest <- data.frame(obs = sapWineTimeRedTest$quality, 
+                                pred = predict(modelRed, sapWineTimeRedTest))
+defaultSummary(predRedQualTest)
+
+```
+
+
+### If time were as plentiful as two-buck chuck
+
+* Measures
+    + I'd take a little time to brush up on some of the physiochemical measures and how they relate to the winemaking process--context matters!
+* Missingness
+    + Imputation
+* Correlations
+    + more meaningful investigation of correlation differences
+    + dimension reduction through principal components or factor analyses (at the risk of losing interpretability)
+* Feature engineering
+    + use of principal components or factors, but this would come at the cost of interpretability 
+* Modeling
+    + 
