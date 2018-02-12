@@ -1,6 +1,6 @@
 ---
 title:  "SAP.iO Data Science Challenge"
-author: "Ki Ka"
+author: "kian kamyab"
 date:   '`r format(Sys.Date(), "%B %d, %Y")`'
 output: github_document
 ---
@@ -23,7 +23,7 @@ sapWineTime <- read.csv('/Users/leotrozvii/Desktop/wineTime/SAPio_DataScience_Ch
 
 I love wine. I first fell in love with Grüner Veltliner. It screams summer. It makes you want to swim in the Danube, even in the winter. That doesn't mean that you should.
 
-We're interested in what makes a good wine. Let's find out. On its face (or bottle's label?) this is a classification problem. Since we're interested in the _what_ of wine quality, I'll avoid less interpretable models that might do quite well at predicting wine quality--like support vector machines or neural nets. I can see logistic regression/linear discriminant analysis, k-nearest neighbors, or some flavor of decision tree being useful.
+We're interested in what makes a good wine. Let's find out. On its face (or bottle's label?) this is a classification problem. Since we're interested in the _what_ of wine quality, I'll avoid less interpretable models that might do quite well at predicting wine quality--like support vector machines or neural nets.
 
 Here's an outline to my approach in getting us from grape to glass--
 
@@ -32,12 +32,9 @@ Here's an outline to my approach in getting us from grape to glass--
     + What do they look like (distributions, missingness)
     + How do they relate to each other (correlations)
 * Decanting the data - feature engineering 
-    + Transformations and dimension reduction
-    + Imputation of missing values
-    + Target prep
 * See, sniff, & sip - modeling
     + Random Forest
-* Next pour - What I'd do if time were as plentiful as 2-buck-chuck
+* Next pour - if time were as plentiful as 2-buck-chuck
 
 ## Uncorking the data
 
@@ -80,7 +77,7 @@ for (i in names(sapWineTime[,(apply(sapWineTime, 2, function(x) length(unique(x)
 }
 ```
 
-These distributions don't look too worrisome. Some make complete sense. In my time working behind a bar and learning about the production of wine, the right-skewed distributions of `citric.acid`, `free.sulfur.dioxide`, and `total.sulfur.dioxide` in red wines and `residual.sugar` in both red and white wines make contextual sense. I can taste some of the `residual.sugar` outliers, maybe some Sauternes or Rieslings...
+These distributions don't look too worrisome. Some make complete sense. In my time working behind a bar and learning about the production of wine, the right-skewed distributions of `citric.acid`, `free.sulfur.dioxide`, and `total.sulfur.dioxide` in red wines and `residual.sugar` in both red and white wines make contextual sense.
 
 #### Missingness
 
@@ -91,7 +88,7 @@ Missingness is always an issue with real data. Hopefully it's missing at random.
 * Look at t-tests of missingness by type, ANOVA results of missingess by quality rating, and ANOVA results of missigness by type and quality rating
 
 ```{r uncorking the data - missingness}
-`
+
 # here i'm creating a summary data frame aggregated to the type and type+quality-level 
 # with a count of missing values and proportion of observations with missing values
 # for each of the physicochemical variables
@@ -166,7 +163,7 @@ missTypeQualMissPlot <-
         plot.title = element_text(hjust = 0.5))
 ```
 
-```{r , fig.height=5, fig.width=7, fig.align='center'}
+```{r, fig.height=5, fig.width=7, fig.align='center'}
 missTypePlot
 ```
 ```{r, fig.height=9, fig.width=7, fig.align='center'}
@@ -311,18 +308,13 @@ For the purposes of a prelimary model, I think there is evidence to run separate
 
 ### Decanting the data
 
-#### Target prep
-
-sapWineTimeRed %>%
-  group_by
+You know what, I'm going to pour these data into a random forest model for a variety of reasons, one of which is not having to do much feature engineering. For other types of models, we'd have to decant the data a bit more. 
 
 ### See, Sniff, and Sip - Modeling
 
-We'll fit a random forest
+I've decided to take a walk through a random forest. While a random forest model poses some limitations in trying to assess what makes a good wine, I think as a preliminary analysis, it poses a number of advantages I'll touch upon when looking at the results.
 
-### 
-
-```{r}
+```{r setting seeds and creating training/test data frames}
 # setting a seed for reproducibility 
 #
 
@@ -337,9 +329,7 @@ sapWineTimeRed <- (split(sapWineTime, f = sapWineTime$type))$red
 
 #### Fitting models
 
-I've decided to take a walk through a random forest. While a random forest model poses some limitations in trying to assess what makes a good wine, I think as a preliminary analysis, it poses a number of advantages I'll touch upon when looking at the results.
-
-```{r see sniff & sip, fig.align='center', message=FALSE, warning=FALSE}
+```{r see sniff & sip, fig.align='center', message=FALSE, warning=FALSE, results='hide'}
 
 ### wines overall
 
@@ -357,7 +347,7 @@ sapWineTimeModelIndex <- sample.split(row.names(sapWineTimeModel), SplitRatio = 
 sapWineTimeTrain <- sapWineTimeModel[sapWineTimeModelIndex, ]
 sapWineTimeTest <- sapWineTimeModel[!sapWineTimeModelIndex, ]
 
-# fitting a random forest model 
+# fitting a random forest model
 #
 
 model <- 
@@ -420,7 +410,7 @@ sapWineTimeRedTest <- sapWineTimeRedModel[!sapWineTimeRedModelIndex, ]
 
 modelRed <- 
   train(quality ~ .,
-        tuneGrid = data.frame(mtry = c(2, 4, 6, 8)),
+        tuneGrid = data.frame(mtry = c(2, 4, 6, 8, 12)),
         data = sapWineTimeRedTrain, 
         method = 'rf',
         preProcess = c('scale', 'center'), 
@@ -428,6 +418,12 @@ modelRed <-
         importance = TRUE
 )
 ```
+
+#### Exploring results
+
+Here we'll take a look at a plot of RMSE by the number of predictors selected to evaluate each tree's split (which informs tuning a random forest), variable importance (basically, how much does MSE change if we shuffled the values of each predictor), and model RMSE, R^2, and MAE. 
+
+First, all wines, then white wines, and finally red wines.
 
 ```{r see, sniff, & sip - results}
 
@@ -466,19 +462,31 @@ defaultSummary(predRedQualTest)
 
 ```
 
-### If time were as plentiful as two-buck chuck
+Random forests are nice for a first look in that I don't have to do much feature engineering, they perform relatively well, and they can point me in the direction of which of the physicochemical properties of wine are predictive of quality. The primary drawback is that a random forest model doesn't give me as granular of a look at the direction and magnitude of the phsyicochemical-quality relationship as say a logistic regression or a decision tree. 
+
+The results of the random forest suggests that for wines overall, `alcohol` and `volatile.acidity` are highly predictive of quality ratings relative to other physicochemical properties. This is similar for white wines. Red wines, `alcohol` and `sulphates` have the greatest predictive power. We don't have much of a sense of which direction of these relationships, which is something we can explore utilizing other models. 
+
+### Next pour - if time were as plentiful as 2-buck-chuck
 
 * Measures
     + I'd take a little time to brush up on some of the physicochemical measures and how they relate to the winemaking process--context matters!
+    + consider transformations/binning
 * Missingness
-    + Imputation
+    + explore imputation
+    + consider the use of binned variables and include a 'missing' category
 * Correlations
     + more meaningful investigation of correlation differences
     + dimension reduction through principal components or factor analyses (at the risk of losing interpretability)
 * Feature engineering
-    + use of principal components or factors, but this would come at the cost of interpretability 
+    + use of principal components or factors to mitigate , but this would come at the cost of interpretability 
 * Modeling
-    + logistic regression and interaction investigation!
-    + ordered logistic regressions
+    + logistic regression and interaction investigation (it's likely wine type interacts with physicochemical characteristics in the relationship with quality ratings)
+    + ordered logistic regression
     + linear discriminant analysis
+    + plan ole' decision tree
     + ensembling
+* Programming
+    + use of functions for repeated tasks
+    + clean up output a bit
+* Misc
+    + drink more wine

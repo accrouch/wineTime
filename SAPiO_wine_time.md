@@ -1,6 +1,6 @@
 SAP.iO Data Science Challenge
 ================
-Ki Ka
+kian kamyab
 February 12, 2018
 
 *What makes a wine 'good'?*
@@ -8,7 +8,7 @@ February 12, 2018
 
 I love wine. I first fell in love with Grüner Veltliner. It screams summer. It makes you want to swim in the Danube, even in the winter. That doesn't mean that you should.
 
-We're interested in what makes a good wine. Let's find out. On its face (or bottle's label?) this is a classification problem. Since we're interested in the *what* of wine quality, I'll avoid less interpretable models that might do quite well at predicting wine quality--like support vector machines or neural nets. I can see logistic regression/linear discriminant analysis, k-nearest neighbors, or some flavor of decision tree being useful.
+We're interested in what makes a good wine. Let's find out. On its face (or bottle's label?) this is a classification problem. Since we're interested in the *what* of wine quality, I'll avoid less interpretable models that might do quite well at predicting wine quality--like support vector machines or neural nets.
 
 Here's an outline to my approach in getting us from grape to glass--
 
@@ -17,14 +17,9 @@ Here's an outline to my approach in getting us from grape to glass--
     -   What do they look like (distributions, missingness)
     -   How do they relate to each other (correlations)
 -   Decanting the data - feature engineering
-    -   Transformations and dimension reduction
-    -   Imputation of missing values
-    -   Target prep
 -   See, sniff, & sip - modeling
-    -   Logisitic regression
-    -   CART
-    -   KNN
--   Next pour - What I'd do if time were as plentiful as 2-buck-chuck
+    -   Random Forest
+-   Next pour - if time were as plentiful as 2-buck-chuck
 
 Uncorking the data
 ------------------
@@ -154,7 +149,7 @@ for (i in names(sapWineTime[,(apply(sapWineTime, 2, function(x) length(unique(x)
 
 <img src="SAPiO_wine_time_files/figure-markdown_github/uncorking the data - distributions-12.png" style="display: block; margin: auto;" />
 
-These distributions don't look too worrisome. Some make complete sense. In my time working behind a bar and learning about the production of wine, the right-skewed distributions of `citric.acid`, `free.sulfur.dioxide`, and `total.sulfur.dioxide` in red wines and `residual.sugar` in both red and white wines make contextual sense. I can taste some of the `residual.sugar` outliers, maybe some Sauternes or Rieslings...
+These distributions don't look too worrisome. Some make complete sense. In my time working behind a bar and learning about the production of wine, the right-skewed distributions of `citric.acid`, `free.sulfur.dioxide`, and `total.sulfur.dioxide` in red wines and `residual.sugar` in both red and white wines make contextual sense.
 
 #### Missingness
 
@@ -167,7 +162,7 @@ Missingness is always an issue with real data. Hopefully it's missing at random.
 ``` r
 # here i'm creating a summary data frame aggregated to the type and type+quality-level 
 # with a count of missing values and proportion of observations with missing values
-# for each of the physiochemical variables
+# for each of the physicochemical variables
 
 # type-level missingness
 #
@@ -333,7 +328,7 @@ It looks like values are missing at random. For the sake of time, we're going to
 
 ### How do measures relate?
 
-I have a very strong suspicion that the physiochemical characteristics of wine are correlated and these correlations differ by wine type. I'll take a visual approach in assessing these correlations. This will help me do three things:
+I have a very strong suspicion that the physicochemical characteristics of wine are correlated and these correlations differ by wine type. I'll take a visual approach in assessing these correlations. This will help me do three things:
 
 1.  What measures seem to be related with quality?
 2.  Do some measures tell me the same information?
@@ -457,15 +452,11 @@ For the purposes of a prelimary model, I think there is evidence to run separate
 
 ### Decanting the data
 
-#### Target prep
-
-sapWineTimeRed %&gt;% group\_by
+You know what, I'm going to pour these data into a random forest model for a variety of reasons, one of which is not having to do much feature engineering. For other types of models, we'd have to decant the data a bit more.
 
 ### See, Sniff, and Sip - Modeling
 
-We'll fit a random forest
-
-### 
+I've decided to take a walk through a random forest. While a random forest model poses some limitations in trying to assess what makes a good wine, I think as a preliminary analysis, it poses a number of advantages I'll touch upon when looking at the results.
 
 ``` r
 # setting a seed for reproducibility 
@@ -499,7 +490,7 @@ sapWineTimeModelIndex <- sample.split(row.names(sapWineTimeModel), SplitRatio = 
 sapWineTimeTrain <- sapWineTimeModel[sapWineTimeModelIndex, ]
 sapWineTimeTest <- sapWineTimeModel[!sapWineTimeModelIndex, ]
 
-# fitting a random forest model 
+# fitting a random forest model
 #
 
 model <- 
@@ -511,53 +502,7 @@ model <-
         trControl = trainControl(method = "cv", number = 5, verboseIter = TRUE),
         importance = TRUE
 )
-```
 
-    ## + Fold1: mtry=2 
-    ## - Fold1: mtry=2 
-    ## + Fold1: mtry=4 
-    ## - Fold1: mtry=4 
-    ## + Fold1: mtry=6 
-    ## - Fold1: mtry=6 
-    ## + Fold1: mtry=8 
-    ## - Fold1: mtry=8 
-    ## + Fold2: mtry=2 
-    ## - Fold2: mtry=2 
-    ## + Fold2: mtry=4 
-    ## - Fold2: mtry=4 
-    ## + Fold2: mtry=6 
-    ## - Fold2: mtry=6 
-    ## + Fold2: mtry=8 
-    ## - Fold2: mtry=8 
-    ## + Fold3: mtry=2 
-    ## - Fold3: mtry=2 
-    ## + Fold3: mtry=4 
-    ## - Fold3: mtry=4 
-    ## + Fold3: mtry=6 
-    ## - Fold3: mtry=6 
-    ## + Fold3: mtry=8 
-    ## - Fold3: mtry=8 
-    ## + Fold4: mtry=2 
-    ## - Fold4: mtry=2 
-    ## + Fold4: mtry=4 
-    ## - Fold4: mtry=4 
-    ## + Fold4: mtry=6 
-    ## - Fold4: mtry=6 
-    ## + Fold4: mtry=8 
-    ## - Fold4: mtry=8 
-    ## + Fold5: mtry=2 
-    ## - Fold5: mtry=2 
-    ## + Fold5: mtry=4 
-    ## - Fold5: mtry=4 
-    ## + Fold5: mtry=6 
-    ## - Fold5: mtry=6 
-    ## + Fold5: mtry=8 
-    ## - Fold5: mtry=8 
-    ## Aggregating results
-    ## Selecting tuning parameters
-    ## Fitting mtry = 4 on full training set
-
-``` r
 ### white wines
 
 # dropping highly correlated variables 
@@ -586,53 +531,7 @@ modelWhite <-
         trControl = trainControl(method = "cv", number = 5, verboseIter = TRUE),
         importance = TRUE
 )
-```
 
-    ## + Fold1: mtry=2 
-    ## - Fold1: mtry=2 
-    ## + Fold1: mtry=4 
-    ## - Fold1: mtry=4 
-    ## + Fold1: mtry=6 
-    ## - Fold1: mtry=6 
-    ## + Fold1: mtry=8 
-    ## - Fold1: mtry=8 
-    ## + Fold2: mtry=2 
-    ## - Fold2: mtry=2 
-    ## + Fold2: mtry=4 
-    ## - Fold2: mtry=4 
-    ## + Fold2: mtry=6 
-    ## - Fold2: mtry=6 
-    ## + Fold2: mtry=8 
-    ## - Fold2: mtry=8 
-    ## + Fold3: mtry=2 
-    ## - Fold3: mtry=2 
-    ## + Fold3: mtry=4 
-    ## - Fold3: mtry=4 
-    ## + Fold3: mtry=6 
-    ## - Fold3: mtry=6 
-    ## + Fold3: mtry=8 
-    ## - Fold3: mtry=8 
-    ## + Fold4: mtry=2 
-    ## - Fold4: mtry=2 
-    ## + Fold4: mtry=4 
-    ## - Fold4: mtry=4 
-    ## + Fold4: mtry=6 
-    ## - Fold4: mtry=6 
-    ## + Fold4: mtry=8 
-    ## - Fold4: mtry=8 
-    ## + Fold5: mtry=2 
-    ## - Fold5: mtry=2 
-    ## + Fold5: mtry=4 
-    ## - Fold5: mtry=4 
-    ## + Fold5: mtry=6 
-    ## - Fold5: mtry=6 
-    ## + Fold5: mtry=8 
-    ## - Fold5: mtry=8 
-    ## Aggregating results
-    ## Selecting tuning parameters
-    ## Fitting mtry = 4 on full training set
-
-``` r
 #### Red Wines
 
 # dropping highly correlated variables 
@@ -654,7 +553,7 @@ sapWineTimeRedTest <- sapWineTimeRedModel[!sapWineTimeRedModelIndex, ]
 
 modelRed <- 
   train(quality ~ .,
-        tuneGrid = data.frame(mtry = c(2, 4, 6, 8)),
+        tuneGrid = data.frame(mtry = c(2, 4, 6, 8, 12)),
         data = sapWineTimeRedTrain, 
         method = 'rf',
         preProcess = c('scale', 'center'), 
@@ -663,49 +562,11 @@ modelRed <-
 )
 ```
 
-    ## + Fold1: mtry=2 
-    ## - Fold1: mtry=2 
-    ## + Fold1: mtry=4 
-    ## - Fold1: mtry=4 
-    ## + Fold1: mtry=6 
-    ## - Fold1: mtry=6 
-    ## + Fold1: mtry=8 
-    ## - Fold1: mtry=8 
-    ## + Fold2: mtry=2 
-    ## - Fold2: mtry=2 
-    ## + Fold2: mtry=4 
-    ## - Fold2: mtry=4 
-    ## + Fold2: mtry=6 
-    ## - Fold2: mtry=6 
-    ## + Fold2: mtry=8 
-    ## - Fold2: mtry=8 
-    ## + Fold3: mtry=2 
-    ## - Fold3: mtry=2 
-    ## + Fold3: mtry=4 
-    ## - Fold3: mtry=4 
-    ## + Fold3: mtry=6 
-    ## - Fold3: mtry=6 
-    ## + Fold3: mtry=8 
-    ## - Fold3: mtry=8 
-    ## + Fold4: mtry=2 
-    ## - Fold4: mtry=2 
-    ## + Fold4: mtry=4 
-    ## - Fold4: mtry=4 
-    ## + Fold4: mtry=6 
-    ## - Fold4: mtry=6 
-    ## + Fold4: mtry=8 
-    ## - Fold4: mtry=8 
-    ## + Fold5: mtry=2 
-    ## - Fold5: mtry=2 
-    ## + Fold5: mtry=4 
-    ## - Fold5: mtry=4 
-    ## + Fold5: mtry=6 
-    ## - Fold5: mtry=6 
-    ## + Fold5: mtry=8 
-    ## - Fold5: mtry=8 
-    ## Aggregating results
-    ## Selecting tuning parameters
-    ## Fitting mtry = 4 on full training set
+#### Exploring results
+
+Here we'll take a look at a plot of RMSE by the number of predictors selected to evaluate each tree's split (which informs tuning a random forest), variable importance (basically, how much does MSE change if we shuffled the values of each predictor), and model RMSE, R^2, and MAE.
+
+First, all wines, then white wines, and finally red wines.
 
 ``` r
 # all wines
@@ -802,17 +663,17 @@ plot(modelRed)
 varImp(modelRed$finalModel)
 ```
 
-    ##                        Overall
-    ## volatile.acidity     32.657407
-    ## citric.acid          20.887324
-    ## chlorides            21.063530
-    ## free.sulfur.dioxide  17.637264
-    ## total.sulfur.dioxide 29.512233
-    ## density              24.033739
-    ## pH                   19.166538
-    ## sulphates            51.268711
-    ## alcohol              58.396739
-    ## vintage              -3.204679
+    ##                         Overall
+    ## volatile.acidity     32.9586902
+    ## citric.acid          20.2356202
+    ## chlorides            23.3502440
+    ## free.sulfur.dioxide  16.2976840
+    ## total.sulfur.dioxide 31.6620406
+    ## density              25.1654396
+    ## pH                   21.0013527
+    ## sulphates            47.6665851
+    ## alcohol              61.2870524
+    ## vintage               0.6595523
 
 ``` r
 modelRedPlot <- varImpPlot(modelRed$finalModel)
@@ -827,21 +688,33 @@ defaultSummary(predRedQualTest)
 ```
 
     ##      RMSE  Rsquared       MAE 
-    ## 0.5608716 0.4853668 0.4231938
+    ## 0.5599837 0.4866800 0.4240723
 
-### If time were as plentiful as two-buck chuck
+Random forests are nice for a first look in that I don't have to do much feature engineering, they perform relatively well, and they can point me in the direction of which of the physicochemical properties of wine are predictive of quality. The primary drawback is that a random forest model doesn't give me as granular of a look at the direction and magnitude of the phsyicochemical-quality relationship as say a logistic regression or a decision tree.
+
+The results of the random forest suggests that for wines overall, `alcohol` and `volatile.acidity` are highly predictive of quality ratings relative to other physicochemical properties. This is similar for white wines. Red wines, `alcohol` and `sulphates` have the greatest predictive power. We don't have much of a sense of which direction of these relationships, which is something we can explore utilizing other models.
+
+### Next pour - if time were as plentiful as 2-buck-chuck
 
 -   Measures
-    -   I'd take a little time to brush up on some of the physiochemical measures and how they relate to the winemaking process--context matters!
+    -   I'd take a little time to brush up on some of the physicochemical measures and how they relate to the winemaking process--context matters!
+    -   consider transformations/binning
 -   Missingness
-    -   Imputation
+    -   explore imputation
+    -   consider the use of binned variables and include a 'missing' category
 -   Correlations
     -   more meaningful investigation of correlation differences
     -   dimension reduction through principal components or factor analyses (at the risk of losing interpretability)
 -   Feature engineering
-    -   use of principal components or factors, but this would come at the cost of interpretability
+    -   use of principal components or factors to mitigate , but this would come at the cost of interpretability
 -   Modeling
-    -   logistic regression and interaction investigation!
-    -   ordered logistic regressions
+    -   logistic regression and interaction investigation (it's likely wine type interacts with physicochemical characteristics in the relationship with quality ratings)
+    -   ordered logistic regression
     -   linear discriminant analysis
+    -   plan ole' decision tree
     -   ensembling
+-   Programming
+    -   use of functions for repeated tasks
+    -   clean up output a bit
+-   Misc
+    -   drink more wine
