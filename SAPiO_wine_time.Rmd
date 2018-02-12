@@ -36,9 +36,7 @@ Here's an outline to my approach in getting us from grape to glass--
     + Imputation of missing values
     + Target prep
 * See, sniff, & sip - modeling
-    + Logisitic regression
-    + CART
-    + KNN
+    + Random Forest
 * Next pour - What I'd do if time were as plentiful as 2-buck-chuck
 
 ## Uncorking the data
@@ -93,10 +91,10 @@ Missingness is always an issue with real data. Hopefully it's missing at random.
 * Look at t-tests of missingness by type, ANOVA results of missingess by quality rating, and ANOVA results of missigness by type and quality rating
 
 ```{r uncorking the data - missingness}
-
+`
 # here i'm creating a summary data frame aggregated to the type and type+quality-level 
 # with a count of missing values and proportion of observations with missing values
-# for each of the physiochemical variables
+# for each of the physicochemical variables
 
 # type-level missingness
 #
@@ -202,7 +200,7 @@ It looks like values are missing at random. For the sake of time, we're going to
 
 ### How do measures relate? 
 
-I have a very strong suspicion that the physiochemical characteristics of wine are correlated and these correlations differ by wine type. I'll take a visual approach in assessing these correlations. This will help me do three things:
+I have a very strong suspicion that the physicochemical characteristics of wine are correlated and these correlations differ by wine type. I'll take a visual approach in assessing these correlations. This will help me do three things:
 
 1. What measures seem to be related with quality?
 2. Do some measures tell me the same information? 
@@ -212,7 +210,7 @@ I have a very strong suspicion that the physiochemical characteristics of wine a
 
 I plot correlations by creating correlation matrices, shaping them into easily plottable (tidy) data frames, and using those data frames to create tile heat maps. 
 
-```{r plotting correlations, fig.align = 'center'}
+```{r plotting correlations, fig.align = 'center', message=FALSE, warning=FALSE}
 
 # creating correlation matrices from data, dropping type as i'll create separate matrices for red and white wines
 wineCorMat <- round(cor(select(sapWineTime, -type), 
@@ -325,20 +323,31 @@ We'll fit a random forest
 ### 
 
 ```{r}
+# setting a seed for reproducibility 
+#
+
 set.seed(1786)
+
+# creating separate data frames for the red and white wine data
+#
+
 sapWineTimeWhite <- (split(sapWineTime, f = sapWineTime$type))$white
 sapWineTimeRed <- (split(sapWineTime, f = sapWineTime$type))$red
 ```
 
-#### All wines
+#### Fitting models
 
-```{r see sniff & sip - all wines, fig.align='center'}
+I've decided to take a walk through a random forest. While a random forest model poses some limitations in trying to assess what makes a good wine, I think as a preliminary analysis, it poses a number of advantages I'll touch upon when looking at the results.
+
+```{r see sniff & sip, fig.align='center', message=FALSE, warning=FALSE}
+
+### wines overall
 
 # dropping highly correlated variables 
 #
 
 sapWineTimeModel <- sapWineTime %>%
-  select(-residual.sugar, -type, -fixed.acidity) %>%
+  select(-residual.sugar, -free.sulfur.dioxide) %>%
   na.omit()
 
 # creating training & testing data sets (70/30 split)
@@ -361,28 +370,13 @@ model <-
         importance = TRUE
 )
 
-# taking a look at the results
-#
-
-plot(model)
-varImp(model$finalModel)
-varImpPlot(model$finalModel)
-
-predQualTest <- data.frame(obs = sapWineTimeTest$quality, 
-                                pred = predict(model, sapWineTimeTest))
-defaultSummary(predQualTest)
-
-```
-
-#### White Wines
-
-```{r see sniff & sip - white wines, fig.align='center'}
+### white wines
 
 # dropping highly correlated variables 
 #
 
 sapWineTimeWhiteModel <- sapWineTimeWhite %>%
-  select(-residual.sugar, -type, -fixed.acidity) %>%
+  select(-residual.sugar, -type, -fixed.acidity, -density) %>%
   na.omit()
 
 # creating training & testing data sets (70/30 split)
@@ -405,28 +399,13 @@ modelWhite <-
         importance = TRUE
 )
 
-# taking a look at the results
-#
-
-plot(modelWhite)
-varImp(modelWhite$finalModel)
-varImpPlot(modelWhite$finalModel)
-
-predWhiteQualTest <- data.frame(obs = sapWineTimeWhiteTest$quality, 
-                                pred = predict(modelWhite, sapWineTimeWhiteTest))
-defaultSummary(predWhiteQualTest)
-
-```
-
 #### Red Wines
-
-```{r see sniff & sip - red wines, fig.align='center'}
 
 # dropping highly correlated variables 
 #
 
 sapWineTimeRedModel <- sapWineTimeRed %>%
-  select(-residual.sugar, -type, -fixed.acidity) %>%
+  select(-residual.sugar, -type, -fixed.acidity, -astringency.rating) %>%
   na.omit()
 
 # creating training & testing data sets (70/30 split)
@@ -448,13 +427,38 @@ modelRed <-
         trControl = trainControl(method = "cv", number = 5, verboseIter = TRUE),
         importance = TRUE
 )
+```
 
-# taking a look at the results
+```{r see, sniff, & sip - results}
+
+# all wines
+#
+
+plot(model)
+varImp(model$finalModel)
+modelAllPlot <- varImpPlot(model$finalModel)
+
+predQualTest <- data.frame(obs = sapWineTimeTest$quality, 
+                                pred = predict(model, sapWineTimeTest))
+defaultSummary(predQualTest)
+
+# white wines
+#
+
+plot(modelWhite)
+varImp(modelWhite$finalModel)
+modelWhitePlot <- varImpPlot(modelWhite$finalModel)
+
+predWhiteQualTest <- data.frame(obs = sapWineTimeWhiteTest$quality, 
+                                pred = predict(modelWhite, sapWineTimeWhiteTest))
+defaultSummary(predWhiteQualTest)
+
+# red wines
 #
 
 plot(modelRed)
 varImp(modelRed$finalModel)
-varImpPlot(modelRed$finalModel)
+modelRedPlot <- varImpPlot(modelRed$finalModel)
 
 predRedQualTest <- data.frame(obs = sapWineTimeRedTest$quality, 
                                 pred = predict(modelRed, sapWineTimeRedTest))
@@ -462,11 +466,10 @@ defaultSummary(predRedQualTest)
 
 ```
 
-
 ### If time were as plentiful as two-buck chuck
 
 * Measures
-    + I'd take a little time to brush up on some of the physiochemical measures and how they relate to the winemaking process--context matters!
+    + I'd take a little time to brush up on some of the physicochemical measures and how they relate to the winemaking process--context matters!
 * Missingness
     + Imputation
 * Correlations
@@ -475,4 +478,7 @@ defaultSummary(predRedQualTest)
 * Feature engineering
     + use of principal components or factors, but this would come at the cost of interpretability 
 * Modeling
-    + 
+    + logistic regression and interaction investigation!
+    + ordered logistic regressions
+    + linear discriminant analysis
+    + ensembling

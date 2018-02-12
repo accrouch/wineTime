@@ -383,8 +383,6 @@ ggplot(data = wineCorMatMelt,
   scale_fill_gradient2_tableau(palette = 'Temperature')
 ```
 
-    ## Warning: Non Lab interpolation is deprecated
-
 <img src="SAPiO_wine_time_files/figure-markdown_github/plotting correlations-1.png" style="display: block; margin: auto;" />
 
 ``` r
@@ -398,8 +396,6 @@ ggplot(data = wineCorMatWhiteMelt,
   labs(title = 'White Wines - Correlation Matrix') +
   scale_fill_gradient2_tableau(palette = 'Temperature')
 ```
-
-    ## Warning: Non Lab interpolation is deprecated
 
 <img src="SAPiO_wine_time_files/figure-markdown_github/plotting correlations-2.png" style="display: block; margin: auto;" />
 
@@ -415,8 +411,6 @@ ggplot(data = wineCorMatRedMelt,
   scale_fill_gradient2_tableau(palette = 'Temperature')
 ```
 
-    ## Warning: Non Lab interpolation is deprecated
-
 <img src="SAPiO_wine_time_files/figure-markdown_github/plotting correlations-3.png" style="display: block; margin: auto;" />
 
 ``` r
@@ -430,8 +424,6 @@ ggplot(data = wineCorMatDiff,
   labs(title = 'Difference Between White and Red Wine Correlation Coefficients') +
   scale_fill_gradient2_tableau(palette = 'Temperature')
 ```
-
-    ## Warning: Non Lab interpolation is deprecated
 
 <img src="SAPiO_wine_time_files/figure-markdown_github/plotting correlations-4.png" style="display: block; margin: auto;" />
 
@@ -476,19 +468,28 @@ We'll fit a random forest
 ### 
 
 ``` r
+# setting a seed for reproducibility 
+#
+
 set.seed(1786)
+
+# creating separate data frames for the red and white wine data
+#
+
 sapWineTimeWhite <- (split(sapWineTime, f = sapWineTime$type))$white
 sapWineTimeRed <- (split(sapWineTime, f = sapWineTime$type))$red
 ```
 
-#### All wines
+#### Fitting models
 
 ``` r
+### wines overall
+
 # dropping highly correlated variables 
 #
 
 sapWineTimeModel <- sapWineTime %>%
-  select(-residual.sugar, -type, -fixed.acidity) %>%
+  select(-residual.sugar, -free.sulfur.dioxide) %>%
   na.omit()
 
 # creating training & testing data sets (70/30 split)
@@ -511,25 +512,6 @@ model <-
         importance = TRUE
 )
 ```
-
-    ## randomForest 4.6-12
-
-    ## Type rfNews() to see new features/changes/bug fixes.
-
-    ## 
-    ## Attaching package: 'randomForest'
-
-    ## The following object is masked from 'package:ranger':
-    ## 
-    ##     importance
-
-    ## The following object is masked from 'package:dplyr':
-    ## 
-    ##     combine
-
-    ## The following object is masked from 'package:ggplot2':
-    ## 
-    ##     margin
 
     ## + Fold1: mtry=2 
     ## - Fold1: mtry=2 
@@ -576,54 +558,13 @@ model <-
     ## Fitting mtry = 4 on full training set
 
 ``` r
-# taking a look at the results
-#
+### white wines
 
-plot(model)
-```
-
-<img src="SAPiO_wine_time_files/figure-markdown_github/see sniff & sip - all wines-1.png" style="display: block; margin: auto;" />
-
-``` r
-varImp(model$finalModel)
-```
-
-    ##                        Overall
-    ## volatile.acidity     75.285830
-    ## citric.acid          46.623193
-    ## astringency.rating   37.556885
-    ## chlorides            44.090272
-    ## free.sulfur.dioxide  65.870229
-    ## total.sulfur.dioxide 45.822371
-    ## density              39.106346
-    ## pH                   48.683081
-    ## sulphates            59.571917
-    ## alcohol              87.388281
-    ## vintage               2.621625
-
-``` r
-varImpPlot(model$finalModel)
-```
-
-<img src="SAPiO_wine_time_files/figure-markdown_github/see sniff & sip - all wines-2.png" style="display: block; margin: auto;" />
-
-``` r
-predQualTest <- data.frame(obs = sapWineTimeTest$quality, 
-                                pred = predict(model, sapWineTimeTest))
-defaultSummary(predQualTest)
-```
-
-    ##      RMSE  Rsquared       MAE 
-    ## 0.5869315 0.5281959 0.4424943
-
-#### White Wines
-
-``` r
 # dropping highly correlated variables 
 #
 
 sapWineTimeWhiteModel <- sapWineTimeWhite %>%
-  select(-residual.sugar, -type, -fixed.acidity) %>%
+  select(-residual.sugar, -type, -fixed.acidity, -density) %>%
   na.omit()
 
 # creating training & testing data sets (70/30 split)
@@ -692,54 +633,13 @@ modelWhite <-
     ## Fitting mtry = 4 on full training set
 
 ``` r
-# taking a look at the results
-#
-
-plot(modelWhite)
-```
-
-<img src="SAPiO_wine_time_files/figure-markdown_github/see sniff & sip - white wines-1.png" style="display: block; margin: auto;" />
-
-``` r
-varImp(modelWhite$finalModel)
-```
-
-    ##                        Overall
-    ## volatile.acidity     80.229141
-    ## citric.acid          42.563542
-    ## astringency.rating   34.881434
-    ## chlorides            39.867191
-    ## free.sulfur.dioxide  60.713424
-    ## total.sulfur.dioxide 41.675093
-    ## density              43.551273
-    ## pH                   39.062838
-    ## sulphates            32.156734
-    ## alcohol              72.177239
-    ## vintage              -1.064142
-
-``` r
-varImpPlot(modelWhite$finalModel)
-```
-
-<img src="SAPiO_wine_time_files/figure-markdown_github/see sniff & sip - white wines-2.png" style="display: block; margin: auto;" />
-
-``` r
-predWhiteQualTest <- data.frame(obs = sapWineTimeWhiteTest$quality, 
-                                pred = predict(modelWhite, sapWineTimeWhiteTest))
-defaultSummary(predWhiteQualTest)
-```
-
-    ##      RMSE  Rsquared       MAE 
-    ## 0.6212310 0.4907877 0.4677993
-
 #### Red Wines
 
-``` r
 # dropping highly correlated variables 
 #
 
 sapWineTimeRedModel <- sapWineTimeRed %>%
-  select(-residual.sugar, -type, -fixed.acidity) %>%
+  select(-residual.sugar, -type, -fixed.acidity, -astringency.rating) %>%
   na.omit()
 
 # creating training & testing data sets (70/30 split)
@@ -808,36 +708,117 @@ modelRed <-
     ## Fitting mtry = 4 on full training set
 
 ``` r
-# taking a look at the results
+# all wines
+#
+
+plot(model)
+```
+
+![](SAPiO_wine_time_files/figure-markdown_github/see,%20sniff,%20&%20sip%20-%20results-1.png)
+
+``` r
+varImp(model$finalModel)
+```
+
+    ##                        Overall
+    ## typewhite            11.482076
+    ## fixed.acidity        35.397110
+    ## volatile.acidity     70.706551
+    ## citric.acid          46.935944
+    ## astringency.rating   36.400236
+    ## chlorides            41.371509
+    ## total.sulfur.dioxide 46.710809
+    ## density              42.956197
+    ## pH                   50.749855
+    ## sulphates            50.558336
+    ## alcohol              87.013074
+    ## vintage               1.759617
+
+``` r
+modelAllPlot <- varImpPlot(model$finalModel)
+```
+
+![](SAPiO_wine_time_files/figure-markdown_github/see,%20sniff,%20&%20sip%20-%20results-2.png)
+
+``` r
+predQualTest <- data.frame(obs = sapWineTimeTest$quality, 
+                                pred = predict(model, sapWineTimeTest))
+defaultSummary(predQualTest)
+```
+
+    ##      RMSE  Rsquared       MAE 
+    ## 0.5966600 0.5126449 0.4514246
+
+``` r
+# white wines
+#
+
+plot(modelWhite)
+```
+
+![](SAPiO_wine_time_files/figure-markdown_github/see,%20sniff,%20&%20sip%20-%20results-3.png)
+
+``` r
+varImp(modelWhite$finalModel)
+```
+
+    ##                         Overall
+    ## volatile.acidity      76.959334
+    ## citric.acid           41.886993
+    ## astringency.rating    39.231212
+    ## chlorides             39.811943
+    ## free.sulfur.dioxide   62.438892
+    ## total.sulfur.dioxide  43.000423
+    ## pH                    48.371861
+    ## sulphates             38.432464
+    ## alcohol              109.773568
+    ## vintage               -1.860498
+
+``` r
+modelWhitePlot <- varImpPlot(modelWhite$finalModel)
+```
+
+![](SAPiO_wine_time_files/figure-markdown_github/see,%20sniff,%20&%20sip%20-%20results-4.png)
+
+``` r
+predWhiteQualTest <- data.frame(obs = sapWineTimeWhiteTest$quality, 
+                                pred = predict(modelWhite, sapWineTimeWhiteTest))
+defaultSummary(predWhiteQualTest)
+```
+
+    ##      RMSE  Rsquared       MAE 
+    ## 0.6141031 0.4810829 0.4546544
+
+``` r
+# red wines
 #
 
 plot(modelRed)
 ```
 
-<img src="SAPiO_wine_time_files/figure-markdown_github/see sniff & sip - red wines-1.png" style="display: block; margin: auto;" />
+![](SAPiO_wine_time_files/figure-markdown_github/see,%20sniff,%20&%20sip%20-%20results-5.png)
 
 ``` r
 varImp(modelRed$finalModel)
 ```
 
-    ##                         Overall
-    ## volatile.acidity     31.2115725
-    ## citric.acid          16.7043132
-    ## astringency.rating   19.0373221
-    ## chlorides            21.2275232
-    ## free.sulfur.dioxide  17.0723701
-    ## total.sulfur.dioxide 27.0805336
-    ## density              24.9913404
-    ## pH                   20.2386169
-    ## sulphates            41.7630759
-    ## alcohol              54.0109415
-    ## vintage               0.1273428
+    ##                        Overall
+    ## volatile.acidity     32.657407
+    ## citric.acid          20.887324
+    ## chlorides            21.063530
+    ## free.sulfur.dioxide  17.637264
+    ## total.sulfur.dioxide 29.512233
+    ## density              24.033739
+    ## pH                   19.166538
+    ## sulphates            51.268711
+    ## alcohol              58.396739
+    ## vintage              -3.204679
 
 ``` r
-varImpPlot(modelRed$finalModel)
+modelRedPlot <- varImpPlot(modelRed$finalModel)
 ```
 
-<img src="SAPiO_wine_time_files/figure-markdown_github/see sniff & sip - red wines-2.png" style="display: block; margin: auto;" />
+![](SAPiO_wine_time_files/figure-markdown_github/see,%20sniff,%20&%20sip%20-%20results-6.png)
 
 ``` r
 predRedQualTest <- data.frame(obs = sapWineTimeRedTest$quality, 
@@ -846,7 +827,7 @@ defaultSummary(predRedQualTest)
 ```
 
     ##      RMSE  Rsquared       MAE 
-    ## 0.5980574 0.4924412 0.4415060
+    ## 0.5608716 0.4853668 0.4231938
 
 ### If time were as plentiful as two-buck chuck
 
@@ -860,4 +841,7 @@ defaultSummary(predRedQualTest)
 -   Feature engineering
     -   use of principal components or factors, but this would come at the cost of interpretability
 -   Modeling
-    -
+    -   logistic regression and interaction investigation!
+    -   ordered logistic regressions
+    -   linear discriminant analysis
+    -   ensembling
